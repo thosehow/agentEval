@@ -9,6 +9,7 @@ TEST_DB_PATH = Path(__file__).resolve().parent / "test.sqlite3"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
 os.environ["AGENT_DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
 os.environ["APP_SECRET_KEY"] = "test-secret"
+os.environ["APP_FORCE_ENV_OVERRIDES"] = "1"
 
 from app.core.config import get_settings  # noqa: E402
 from app.db.base import metadata  # noqa: E402

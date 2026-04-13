@@ -14,6 +14,7 @@ from app.utils.serialization import to_plain_data
 
 
 JSON_BLOCK_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
+QUOTA_ERROR_MARKERS = ("resource_exhausted", "quota exceeded", "429")
 
 
 @dataclass
@@ -53,12 +54,41 @@ class GeminiExecutionError(RuntimeError):
     pass
 
 
+class GeminiQuotaExceededError(GeminiExecutionError):
+    pass
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in QUOTA_ERROR_MARKERS)
+
+
+def _format_quota_error(model_name: str, exc: Exception) -> str:
+    return (
+        f"Gemini quota exhausted for model {model_name}. "
+        "Please check Gemini billing/quota or switch to gemini-2.5-flash. "
+        f"Original error: {exc}"
+    )
+
+
 class GeminiAgentService:
     def __init__(self) -> None:
         self.settings = get_settings()
         if not self.settings.gemini_api_key:
             raise GeminiExecutionError("GEMINI_API_KEY is not configured.")
         self.client = genai.Client(api_key=self.settings.gemini_api_key)
+
+    def _generate_content(self, *, model_name: str, contents: Any, config: types.GenerateContentConfig) -> Any:
+        try:
+            return self.client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+        except Exception as exc:
+            if _is_quota_error(exc):
+                raise GeminiQuotaExceededError(_format_quota_error(model_name, exc)) from exc
+            raise
 
     def run_agent(
         self,
@@ -93,8 +123,8 @@ class GeminiAgentService:
         started = time.perf_counter()
 
         for _ in range(self.settings.gemini_max_tool_rounds):
-            response = self.client.models.generate_content(
-                model=model_name,
+            response = self._generate_content(
+                model_name=model_name,
                 contents=contents,
                 config=config,
             )
@@ -218,8 +248,8 @@ class GeminiAgentService:
 }}
 """.strip()
 
-        response = self.client.models.generate_content(
-            model=self.settings.gemini_judge_model,
+        response = self._generate_content(
+            model_name=self.settings.gemini_judge_model,
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.1),
         )

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,6 +27,13 @@ class Settings(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         # Prefer the repository's .env over ambient shell variables so local
         # dev commands don't accidentally bind to another Postgres instance.
+        if os.environ.get("APP_FORCE_ENV_OVERRIDES") == "1":
+            return (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
         return (
             init_settings,
             dotenv_settings,

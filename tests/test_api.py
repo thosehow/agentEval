@@ -36,7 +36,13 @@ def test_dataset_endpoints(client):
   datasets_response = client.get("/api/datasets")
   assert datasets_response.status_code == 200
   datasets = datasets_response.json()
-  assert len(datasets) >= 2
+  assert len(datasets) >= 5
+  dataset_ids = {item["id"] for item in datasets}
+  assert {
+    "AuthService_Basics",
+    "Postgres_ReadOnly_Catalog",
+    "AgentOps_ReadOnly_Summary",
+  }.issubset(dataset_ids)
 
   dataset_id = datasets[0]["id"]
   detail_response = client.get(f"/api/datasets/{dataset_id}")
@@ -72,12 +78,14 @@ def test_create_benchmark_and_lab_runs(client, monkeypatch):
     json={
       "name": "回归评测任务",
       "dataset_id": dataset_id,
+      "model_name": "gemini-2.5-pro",
     },
   )
   assert benchmark_response.status_code == 201, benchmark_response.text
   benchmark_run = benchmark_response.json()
   assert benchmark_run["status"] == "queued"
   assert benchmark_run["dataset_id"] == dataset_id
+  assert benchmark_run["model_name"] == "gemini-2.5-pro"
 
   lab_response = client.post(
     "/api/lab/runs",

@@ -9,6 +9,7 @@ from app.models.entities import CriterionType, RunKind, RunStatus, StepType
 class RunCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     dataset_id: str
+    model_name: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class LabRunCreateRequest(BaseModel):

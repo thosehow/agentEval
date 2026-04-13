@@ -8,6 +8,7 @@ from app.db.session import get_session_factory
 from app.models import (
     CaseResult,
     Dataset,
+    DatasetCase,
     EvaluationRun,
     RunKind,
     RunStatus,
@@ -15,7 +16,7 @@ from app.models import (
     StepType,
     User,
 )
-from app.services.gemini_agent import GeminiAgentService
+from app.services.gemini_agent import GeminiAgentService, GeminiQuotaExceededError
 from app.services.tooling import ToolExecutor
 
 
@@ -24,6 +25,62 @@ def utcnow() -> datetime:
 
 
 class RunExecutor:
+    @staticmethod
+    def _record_failed_case(
+        db: Session,
+        *,
+        run: EvaluationRun,
+        case: DatasetCase,
+        failure_reason: str,
+    ) -> None:
+        db.add(
+            CaseResult(
+                run_id=run.id,
+                dataset_case_id=case.id,
+                prompt_snapshot=case.prompt,
+                expected_behavior_snapshot=case.expected_behavior,
+                criterion_type=case.criterion_type,
+                output_text=None,
+                score=0.0,
+                passed=False,
+                failure_reason=failure_reason,
+                latency_ms=None,
+                cost_usd=0.0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                model_name=run.model_name,
+                raw_response={"error": failure_reason},
+            )
+        )
+
+    @staticmethod
+    def _finalize_benchmark_run(
+        db: Session,
+        *,
+        run: EvaluationRun,
+        totals: dict[str, float | int],
+        total_cases: int,
+        status: RunStatus,
+        error_message: str | None = None,
+    ) -> None:
+        normalized_total_cases = total_cases or 1
+        run.total_score = round(float(totals["score"]) / normalized_total_cases, 2)
+        run.success_rate = round(float(totals["passed"]) * 100 / normalized_total_cases, 2)
+        run.avg_latency_ms = (
+            round(float(totals["latency_ms"]) / normalized_total_cases, 2) if totals["latency_ms"] else 0.0
+        )
+        run.total_cost_usd = round(float(totals["cost_usd"]), 6)
+        run.prompt_tokens = int(totals["prompt_tokens"])
+        run.completion_tokens = int(totals["completion_tokens"])
+        run.total_tokens = int(totals["total_tokens"])
+        run.succeeded_cases = int(totals["passed"])
+        run.failed_cases = int(totals["failed"])
+        run.status = status
+        run.error_message = error_message
+        run.completed_at = utcnow()
+        db.commit()
+
     @classmethod
     def launch(cls, run_id: str) -> None:
         thread = threading.Thread(target=cls._run_in_thread, args=(run_id,), daemon=True)
@@ -150,7 +207,7 @@ class RunExecutor:
         }
         step_index = 1
 
-        for case in dataset_cases:
+        for case_index, case in enumerate(dataset_cases):
             db.refresh(run)
             if run.cancel_requested:
                 run.status = RunStatus.CANCELLED
@@ -225,40 +282,40 @@ class RunExecutor:
                     totals["passed"] += 1
                 else:
                     totals["failed"] += 1
-            except Exception as exc:
-                db.add(
-                    CaseResult(
-                        run_id=run.id,
-                        dataset_case_id=case.id,
-                        prompt_snapshot=case.prompt,
-                        expected_behavior_snapshot=case.expected_behavior,
-                        criterion_type=case.criterion_type,
-                        output_text=None,
-                        score=0.0,
-                        passed=False,
-                        failure_reason=str(exc),
-                        latency_ms=None,
-                        cost_usd=0.0,
-                        prompt_tokens=0,
-                        completion_tokens=0,
-                        total_tokens=0,
-                        model_name=run.model_name,
-                        raw_response={"error": str(exc)},
+            except GeminiQuotaExceededError as exc:
+                quota_message = str(exc)
+                for pending_case in dataset_cases[case_index:]:
+                    cls._record_failed_case(
+                        db,
+                        run=run,
+                        case=pending_case,
+                        failure_reason=quota_message,
                     )
+                totals["failed"] += len(dataset_cases[case_index:])
+                db.commit()
+                cls._finalize_benchmark_run(
+                    db,
+                    run=run,
+                    totals=totals,
+                    total_cases=len(dataset_cases),
+                    status=RunStatus.FAILED,
+                    error_message=quota_message,
+                )
+                return
+            except Exception as exc:
+                cls._record_failed_case(
+                    db,
+                    run=run,
+                    case=case,
+                    failure_reason=str(exc),
                 )
                 totals["failed"] += 1
             db.commit()
 
-        total_cases = len(dataset_cases) or 1
-        run.total_score = round(totals["score"] / total_cases, 2)
-        run.success_rate = round(totals["passed"] * 100 / total_cases, 2)
-        run.avg_latency_ms = round(totals["latency_ms"] / total_cases, 2) if totals["latency_ms"] else 0.0
-        run.total_cost_usd = round(totals["cost_usd"], 6)
-        run.prompt_tokens = totals["prompt_tokens"]
-        run.completion_tokens = totals["completion_tokens"]
-        run.total_tokens = totals["total_tokens"]
-        run.succeeded_cases = totals["passed"]
-        run.failed_cases = totals["failed"]
-        run.status = RunStatus.COMPLETED
-        run.completed_at = utcnow()
-        db.commit()
+        cls._finalize_benchmark_run(
+            db,
+            run=run,
+            totals=totals,
+            total_cases=len(dataset_cases),
+            status=RunStatus.COMPLETED,
+        )

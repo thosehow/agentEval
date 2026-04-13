@@ -62,7 +62,7 @@ def create_benchmark_run(
         agent_profile_id=profile.id,
         run_kind=RunKind.BENCHMARK,
         name=payload.name,
-        model_name=profile.model_name,
+        model_name=payload.model_name or profile.model_name,
         temperature=profile.temperature,
         system_prompt_snapshot=profile.system_prompt,
         enabled_tools=profile.enabled_tools,
