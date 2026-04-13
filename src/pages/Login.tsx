@@ -1,7 +1,40 @@
-import { ArrowRight, Eye, Mail, ShieldCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ArrowRight, Eye, EyeOff, Mail, ShieldCheck } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Login() {
+  const navigate = useNavigate();
+  const { login, user } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await login({
+        email,
+        password,
+        remember_me: rememberMe,
+      });
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登录失败，请稍后重试。");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen flex bg-background text-on-surface">
       {/* Left Side: Deep Space Visual */}
@@ -59,14 +92,17 @@ export function Login() {
             <p className="text-on-surface-variant font-normal">登录您的账户以继续</p>
           </div>
 
-          <form className="space-y-6">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">电子邮箱</label>
               <div className="relative group">
                 <input 
                   type="email" 
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   placeholder="name@company.com"
                   className="w-full px-4 py-3 bg-surface-container-lowest border-none rounded-xl ring-1 ring-outline-variant/30 focus:ring-2 focus:ring-primary-container transition-all outline-none"
+                  required
                 />
                 <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
               </div>
@@ -79,25 +115,44 @@ export function Login() {
               </div>
               <div className="relative group">
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
                   className="w-full px-4 py-3 bg-surface-container-lowest border-none rounded-xl ring-1 ring-outline-variant/30 focus:ring-2 focus:ring-primary-container transition-all outline-none"
+                  required
                 />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-background transition-colors">
-                  <Eye className="w-5 h-5" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-background transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
             <div className="flex items-center">
-              <input type="checkbox" id="remember" className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary transition-all" />
+              <input
+                type="checkbox"
+                id="remember"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+                className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary transition-all"
+              />
               <label htmlFor="remember" className="ml-2 text-sm text-on-surface-variant">记住我</label>
             </div>
 
-            <Link to="/" className="w-full bg-gradient-to-r from-primary to-primary-container text-white font-bold py-3.5 rounded-xl shadow-sm hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-              <span>立即登录</span>
+            {error && <p className="text-sm text-error">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-gradient-to-r from-primary to-primary-container text-white font-bold py-3.5 rounded-xl shadow-sm hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+            >
+              <span>{submitting ? "登录中..." : "立即登录"}</span>
               <ArrowRight size={18} />
-            </Link>
+            </button>
           </form>
 
           <p className="mt-10 text-center text-sm text-on-surface-variant">

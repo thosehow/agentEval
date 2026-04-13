@@ -4,5 +4,10 @@ dist/
 coverage/
 .DS_Store
 *.log
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.sqlite3
 .env*
 !.env.example

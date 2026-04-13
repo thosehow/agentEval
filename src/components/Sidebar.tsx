@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { icon: LayoutDashboard, label: "控制面板", path: "/" },
@@ -27,6 +28,7 @@ const navItems = [
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [isNewRunModalOpen, setIsNewRunModalOpen] = useState(false);
@@ -42,6 +44,12 @@ export function Sidebar() {
     setIsNewRunModalOpen(false);
     navigate('/lab');
     handleAction("已创建新运行并进入实验室");
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setShowProfileMenu(false);
+    navigate("/login");
   };
 
   return (
@@ -123,11 +131,11 @@ export function Sidebar() {
               <img
                 alt="User"
                 className="w-8 h-8 rounded-full bg-slate-700"
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Alex"
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.full_name ?? "User")}`}
               />
               <div className="overflow-hidden">
-                <p className="text-white text-xs font-semibold truncate">Alex Chen</p>
-                <p className="text-slate-500 text-[10px] truncate">首席架构师</p>
+                <p className="text-white text-xs font-semibold truncate">{user?.full_name ?? "用户"}</p>
+                <p className="text-slate-500 text-[10px] truncate">{user?.team_name ?? "评测平台成员"}</p>
               </div>
             </button>
 
@@ -142,7 +150,7 @@ export function Sidebar() {
                     <Settings size={14} /> 账户设置
                   </button>
                   <div className="h-px bg-slate-700 my-1"></div>
-                  <button onClick={() => { handleAction("退出登录"); setShowProfileMenu(false); }} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 flex items-center gap-2">
+                  <button onClick={() => { void handleLogout(); }} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 flex items-center gap-2">
                     <LogOut size={14} /> 退出登录
                   </button>
                 </div>

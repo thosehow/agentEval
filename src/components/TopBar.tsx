@@ -1,6 +1,7 @@
 import { Search, Bell, History, X, CheckCircle2, LogOut, Settings, User } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function TopBar() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -8,11 +9,18 @@ export function TopBar() {
   const [toastMessage, setToastMessage] = useState("");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleAction = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setShowProfileMenu(false);
+    navigate("/login");
   };
 
   return (
@@ -95,7 +103,7 @@ export function TopBar() {
               <img
                 alt="User Avatar"
                 className="w-8 h-8 rounded-full bg-primary-fixed"
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Alex"
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.full_name ?? "User")}`}
               />
             </button>
             
@@ -104,8 +112,8 @@ export function TopBar() {
                 <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)}></div>
                 <div className="absolute right-0 mt-2 w-48 bg-surface rounded-xl shadow-lg border border-outline-variant/20 py-1 z-50 animate-in fade-in slide-in-from-top-2">
                   <div className="px-4 py-2 border-b border-outline-variant/10 mb-1">
-                    <p className="text-sm font-bold text-on-surface">Alex Chen</p>
-                    <p className="text-xs text-on-surface-variant">alex@example.com</p>
+                    <p className="text-sm font-bold text-on-surface">{user?.full_name ?? "用户"}</p>
+                    <p className="text-xs text-on-surface-variant">{user?.email ?? "未登录"}</p>
                   </div>
                   <button onClick={() => { handleAction("打开个人资料"); setShowProfileMenu(false); }} className="w-full text-left px-4 py-2 text-sm text-on-surface hover:bg-surface-container flex items-center gap-2">
                     <User size={14} /> 个人资料
@@ -114,7 +122,7 @@ export function TopBar() {
                     <Settings size={14} /> 账户设置
                   </button>
                   <div className="h-px bg-outline-variant/10 my-1"></div>
-                  <button onClick={() => { handleAction("退出登录"); setShowProfileMenu(false); }} className="w-full text-left px-4 py-2 text-sm text-error hover:bg-error/10 flex items-center gap-2">
+                  <button onClick={() => { void handleLogout(); }} className="w-full text-left px-4 py-2 text-sm text-error hover:bg-error/10 flex items-center gap-2">
                     <LogOut size={14} /> 退出登录
                   </button>
                 </div>
